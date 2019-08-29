@@ -59,8 +59,13 @@ namespace Diggins.Jigsaw
 
         public static void TimingTests()
         {
-            Utilities.TimeExecution(() =>
-                TestParse( @"x = { a => 10, b => 20, c =>  { x => 1, y => 2, z => 3 } };", RubyGrammar.Script));
+			Utilities.TimeExecution ( () =>
+				  TestParse ( @"x = 1", RubyGrammar.Script ) );
+
+			return;
+
+			Utilities.TimeExecution(() =>
+                TestParse( @"x = { a => 10, b => 20, c => { x => 1, y => 2, z => 3 } }", RubyGrammar.Script));
 
             Utilities.TimeExecution(() =>
                 TestParse(@"var x = { a : 10, b : 20, c :  { x : 1, y : 2, z : a[1][2][3][4][5][6] } };", RubyGrammar.Script));
@@ -108,9 +113,7 @@ namespace Diggins.Jigsaw
 
         public static void Tests()
         {
-			Console.WriteLine ( RubyGrammar.Script );
-
-			TimingTests ();
+			//TimingTests ();
 
             TestParse("3 + 3", RubyGrammar.Expr);
             TestParse("3 + 3", RubyGrammar.BinaryExpr);
@@ -153,9 +156,9 @@ namespace Diggins.Jigsaw
             TestParse("{ a : b }", RubyGrammar.Expr);
             TestParse("{a:b,\"b\":42}", RubyGrammar.Expr);
             TestParse("{ a : { b : c }, d : [1, 2, 3] }", RubyGrammar.Expr);
-            TestParse("function f() { }", RubyGrammar.Function);
+            TestParse("def f() end", RubyGrammar.FunExpr);
             TestParse("function f() { }", RubyGrammar.Expr);
-            TestParse("function () { }", RubyGrammar.Function);
+            TestParse("function () { }", RubyGrammar.FunExpr);
             TestParse("function (a) { }", RubyGrammar.Function);
             TestParse("function f(a) { }", RubyGrammar.Function);
             TestParse("function (a, b) { }", RubyGrammar.Function);

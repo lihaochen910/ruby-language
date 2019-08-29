@@ -15,7 +15,7 @@ namespace Diggins.Jigsaw {
 		public static Rule RecBlock					= Recursive ( () => Block );
 		public static Rule RecExpr					= Recursive ( () => Expr );
 		public static Rule RecStatement				= Recursive ( () => Statement );
-		public static Rule Literal					= Recursive ( () => String | Fixnum | Float | Hash | Array | True | False | Nil | Symbol );
+		public static Rule Literal					= Recursive ( () => String | Float | Fixnum | Hash | Array | True | False | Nil | Symbol );
 
 		//----------------------------------------------------------------//
 		/**	@ruby	字符串Token
@@ -78,6 +78,8 @@ namespace Diggins.Jigsaw {
 		public static Rule Fixnum					= Digits + Not ( MatchChar ( '.' ) );
 		public static Rule Float					= Digits + ( ( Frac + Opt ( Exp ) ) | Exp );
 		public static Rule HexDigit					= MatchString ( "0x" ) + Digit | CharRange ( 'a', 'f' ) | CharRange ( 'A', 'F' );
+		public static Rule Number					= Float | Fixnum | HexDigit;
+
 
 		//----------------------------------------------------------------//
 		/**	@ruby	变量和常量
@@ -87,12 +89,14 @@ namespace Diggins.Jigsaw {
 		public static Rule IdentFirstChar			= MatchChar ( c => Char.IsLetter ( c ) || c == '_' );
 		public static Rule IdentNextChar			= MatchChar ( c => Char.IsLetterOrDigit ( c ) || c == '_' );
 		public static Rule Identifier				= IdentFirstChar + ZeroOrMore ( IdentNextChar );
+		public static Rule IdentifierList			= Node ( Opt ( CharToken ( '(' ) ) + CommaDelimited ( Identifier + WS ) + Opt ( CharToken ( ')' ) ) );
 		public static Rule Name						= Node ( Identifier );
 		public static Rule NameList					= Node ( Name + ZeroOrMore ( Comma + Name ) );
 		public static Rule LocalVariable			= Node ( Identifier + WS );
 		public static Rule GlobalVariable			= Node ( MatchChar ( '$' ) + Identifier + WS );
 		public static Rule InstanceVariable			= Node ( MatchChar ( '@' ) + Identifier + WS );
 		public static Rule Constants				= Node ( CharRange ( 'A', 'Z' ) + ZeroOrMore ( CharRange ( 'A', 'Z' ) ) + WS );
+		public static Rule Variable					= LocalVariable | GlobalVariable | InstanceVariable | Constants;
 
 		//----------------------------------------------------------------//
 		/**	@ruby	基础类型Token
@@ -107,12 +111,14 @@ namespace Diggins.Jigsaw {
 		public static Rule ParamChar				= MatchString ( "#{" ) + Identifier + MatchChar ( '}' );
 		public static Rule DoubleQuotedString		= Node ( MatchChar ( '"' ) + ZeroOrMore ( UnicodeChar | ControlChar | ExceptCharSet ( "\"\\" ) | ParamChar ) + MatchChar ( '"' ) );
 		public static Rule SingleQuotedString		= Node ( MatchChar ( '\'' ) + ZeroOrMore ( UnicodeChar | ControlChar | ExceptCharSet ( "'\\" ) ) + MatchChar ( '\'' ) );
-		public static Rule LineOrientedString		= Node ( MatchString ( "<<EOF" ) + MatchString ( "EOF" ) );
+		public static Rule LineOrientedString		= Node ( MatchString ( "<<EOF" ) + ZeroOrMore ( UnicodeChar | ControlChar | ExceptCharSet ( "\"\\" ) | ParamChar ) + MatchString ( "EOF" ) );
 		public static Rule String					= Node ( DoubleQuotedString | SingleQuotedString | LineOrientedString );
-		public static Rule Number					= Float | Fixnum;
 		public static Rule Symbol					= Node ( MatchChar ( ':' ) + Identifier );
 		public static Rule Value					= Node ( Recursive ( () => String | Number | Hash | Array | True | False | Nil | Symbol ) );
 		public static Rule Array					= Node ( CharToken ( '[' ) + CommaDelimited ( Value ) + WS + CharToken ( ']' ) );
+		public static Rule PairName					= Identifier | DoubleQuotedString | SingleQuotedString;
+		public static Rule Pair						= Node ( PairName + WS + ( StringToken ( "=>" ) | CharToken ( ':' ) | Eq ) + RecExpr + WS );
+		public static Rule Hash						= Node ( CharToken ( '{' ) + CommaDelimited ( Pair ) + WS + CharToken ( '}' ) );
 
 		//----------------------------------------------------------------//
 		/**	@ruby	方法表达式
@@ -120,7 +126,6 @@ namespace Diggins.Jigsaw {
 					ruby_is_simple
 		*/
 		public static Rule Ellipsis					= MatchChar ( '*' ) + Name;
-		public static Rule ParamList				= Node ( OptParenthesize ( CommaDelimited ( Identifier + WS ) ) );
 		public static Rule Params					= Node ( OptParenthesize ( ( NameList + Opt ( Comma + Ellipsis ) ) | Ellipsis ) );
 		public static Rule NamedFunc				= Node ( Keyword ( "def" ) + Identifier + WS + Params + RecStatement );
 		public static Rule ClassFunc				= Node ( Keyword ( "def" ) + Identifier + ( MatchChar ( '.' ) | MatchString ( "::" ) )  + Params + RecStatement );
@@ -133,31 +138,26 @@ namespace Diggins.Jigsaw {
 		*/
 		public static Rule FuncName					= Node ( Name + ZeroOrMore ( CharToken ( '.' ) + Name ) + Opt ( ( MatchChar ( '.' ) | MatchString ( "::" ) ) + Name ) );
 		public static Rule ArgList					= Node ( Opt ( CharToken ( '(' ) ) + CommaDelimited ( RecExpr ) + Opt ( CharToken ( ')' ) ) );
-		public static Rule IdentifierList			= Node ( Opt ( CharToken ( '(' ) ) + CommaDelimited ( Identifier + WS ) + Opt ( CharToken ( ')' ) ) );
 		public static Rule Index					= Node ( CharToken ( '[' ) + RecExpr + CharToken ( ']' ) );
 		public static Rule Field					= Node ( CharToken ( '.' ) + Identifier );
 		public static Rule PrefixOp					= Node ( MatchStringSet ( "! - ~ not" ) );
 		public static Rule ParenExpr				= Node ( CharToken ( '(' ) + RecExpr + WS + CharToken ( ')' ) );
-		public static Rule NewExpr					= Node ( Keyword ( "new" ) + Recursive ( () => PostfixExpr ) );
-		public static Rule LeafExpr					= ParenExpr | NewExpr | Function | Literal | Identifier;
+		public static Rule LeafExpr					= ParenExpr | Literal | Variable;
 		public static Rule PrefixExpr				= Node ( PrefixOp + Recursive ( () => PrefixOrLeafExpr ) );
 		public static Rule PrefixOrLeafExpr			= PrefixExpr | LeafExpr;
 		public static Rule PostfixOp				= Field | Index | ArgList;
 		public static Rule PostfixExpr				= Node ( PrefixOrLeafExpr + WS + OneOrMore ( PostfixOp + WS ) );
 		public static Rule UnaryExpr				= PostfixExpr | PrefixOrLeafExpr;
-		public static Rule BinaryOp					= Node ( MatchStringSet ( "<= >= == != << >> && || and or < > & | + - * % /" ) );
+		public static Rule BinaryOp					= Node ( MatchStringSet ( "<= >= <=> == != === << >> && || and or < > & | ^ ~ + - * ** % / .. ..." ) );
 		public static Rule BinaryExpr				= Node ( UnaryExpr + WS + BinaryOp + WS + RecExpr );
-		public static Rule AssignOp					= Node ( MatchStringSet ( "&&= ||= >>= <<= += -= *= %= /= &s= |= ^= =" ) );
-		public static Rule AssignExpr				= Node ( ( Identifier | PostfixExpr ) + WS + AssignOp + WS + RecExpr );
+		public static Rule AssignOp					= Node ( MatchStringSet ( "&&= ||= >>= <<= += -= *= **= %= /= |= ^= =" ) );
+		public static Rule AssignExpr				= Node ( ( Variable | PostfixExpr ) + WS + AssignOp + WS + RecExpr );
 		public static Rule TertiaryExpr				= Node ( ( AssignExpr | BinaryExpr | UnaryExpr ) + WS + CharToken ( '?' ) + RecExpr + CharToken ( ':' ) + RecExpr + WS );
-		public static Rule Expr						= Node ( ( Nil | False | True | Number | String | PrefixExpr | TertiaryExpr | AssignExpr | BinaryExpr | UnaryExpr ) + WS );
+		public static Rule Expr						= Node ( ( TertiaryExpr | AssignExpr | BinaryExpr | UnaryExpr ) + WS );
 		public static Rule ExprList					= Node ( Expr + ZeroOrMore ( Comma + Expr ) );
 
 		public static Rule ParanExpr				= Node ( Parenthesize ( Expr ) );
 
-		public static Rule Pair						= Node ( Expr + ( StringToken ( "=>" ) | Eq ) + Expr );
-		public static Rule Hash						= Node ( CharToken ( '{' ) + CommaDelimited ( Pair ) + WS + CharToken ( '}' ) );
-		
 		public static Rule Var						= Node ( Name | ( PrefixExpr + CharToken ( '[' ) + Exp + CharToken ( ']' ) ) | ( PrefixExpr + CharToken ( '.' ) + Name ) );
 		public static Rule VarList					= Node ( Var + ZeroOrMore ( Comma + Var ) );
 		public static Rule FunCall					= Node ( PrefixExpr + Opt ( CharToken ( '.' ) + Name ) );
@@ -186,7 +186,7 @@ namespace Diggins.Jigsaw {
 		public static Rule LastStat					= Node ( ( StringToken ( "return" ) + Opt ( ExprList ) ) | Break | Next | Redo | ExprList );
 		public static Rule Class					= Node ( Keyword ( "class" ) + ( ( Identifier + Opt ( Keyword ( "<" ) + Identifier ) ) | ( Keyword ( "<<" ) + Expr ) )  + RecExpr + WS + Keyword ( "end" ) );
 		public static Rule Module					= Node ( Keyword ( "module" ) + Identifier + RecExpr + WS + Keyword ( "end" ) );
-		public static Rule Range					= Node ( Expr + ( StringToken ( ".." ) | StringToken ( "..." ) )  + Expr );
+		//public static Rule Range					= Node ( Expr + ( StringToken ( ".." ) | StringToken ( "..." ) )  + Expr );
 		public static Rule VarDecl					= Node ( Keyword ( "var" ) + Identifier + WS + Opt ( Eq + Expr ) + Opt ( Eos ) );
 		public static Rule While					= Node ( Keyword ( "while" ) + OptParenthesize ( Expr ) + Opt ( Keyword ( "do" ) ) + RecStatement + WS + Keyword ( "end" ) );
 		public static Rule Until					= Node ( Keyword ( "until" ) + OptParenthesize ( Expr ) + Opt ( Keyword ( "do" ) ) + RecStatement + WS + Keyword ( "end" ) );
