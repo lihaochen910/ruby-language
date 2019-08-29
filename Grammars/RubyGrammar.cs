@@ -10,6 +10,38 @@ namespace Diggins.Jigsaw {
 	public class RubyGrammar : Grammar {
 
 		//----------------------------------------------------------------//
+		/**	@ruby	Recursive rules defined at the top
+		*/
+		public static Rule RecBlock					= Recursive ( () => Block );
+		public static Rule RecExpr					= Recursive ( () => Expr );
+		public static Rule RecStatement				= Recursive ( () => Statement );
+		public static Rule Literal					= Recursive ( () => String | Fixnum | Float | Hash | Array | True | False | Nil | Symbol );
+
+		//----------------------------------------------------------------//
+		/**	@ruby	字符串Token
+			@text	foobar
+					ruby_is_simple
+		*/
+		public static Rule Letter					= MatchChar ( Char.IsLetter );
+		public static Rule LetterOrDigit			= MatchChar ( Char.IsLetterOrDigit );
+		public static Rule WS						= Pattern ( @"\s*" );
+
+		public static Rule Comma					= CharToken ( ',' );
+		public static Rule Eos						= CharToken ( ';' );
+		public static Rule Eq						= CharToken ( '=' );
+		public static Rule Dot						= CharToken ( '.' );
+
+		//----------------------------------------------------------------//
+		/**	@ruby	注释
+			@text	# 这是单行注释
+			@text	=begin
+					这是多行注释
+					=end
+		*/
+		public static Rule LineComment				= MatchString ( "#" ) + AdvanceWhileNot ( MatchChar ( '\n' ) );
+		public static Rule FullComment				= MatchString ( "=begin" ) + AdvanceWhileNot ( MatchString ( "=end" ) );
+
+		//----------------------------------------------------------------//
 		/**	@ruby	数字
 			@text	123
 						integer
@@ -48,13 +80,19 @@ namespace Diggins.Jigsaw {
 		public static Rule HexDigit					= MatchString ( "0x" ) + Digit | CharRange ( 'a', 'f' ) | CharRange ( 'A', 'F' );
 
 		//----------------------------------------------------------------//
-		/**	@ruby	字符串Token
+		/**	@ruby	变量和常量
 			@text	foobar
 					ruby_is_simple
 		*/
-		public static Rule Letter					= MatchChar ( Char.IsLetter );
-		public static Rule LetterOrDigit			= MatchChar ( Char.IsLetterOrDigit );
-		public static Rule WS						= Pattern ( @"\s*" );
+		public static Rule IdentFirstChar			= MatchChar ( c => Char.IsLetter ( c ) || c == '_' );
+		public static Rule IdentNextChar			= MatchChar ( c => Char.IsLetterOrDigit ( c ) || c == '_' );
+		public static Rule Identifier				= IdentFirstChar + ZeroOrMore ( IdentNextChar );
+		public static Rule Name						= Node ( Identifier );
+		public static Rule NameList					= Node ( Name + ZeroOrMore ( Comma + Name ) );
+		public static Rule LocalVariable			= Node ( Identifier + WS );
+		public static Rule GlobalVariable			= Node ( MatchChar ( '$' ) + Identifier + WS );
+		public static Rule InstanceVariable			= Node ( MatchChar ( '@' ) + Identifier + WS );
+		public static Rule Constants				= Node ( CharRange ( 'A', 'Z' ) + ZeroOrMore ( CharRange ( 'A', 'Z' ) ) + WS );
 
 		//----------------------------------------------------------------//
 		/**	@ruby	基础类型Token
@@ -74,19 +112,26 @@ namespace Diggins.Jigsaw {
 		public static Rule Number					= Float | Fixnum;
 		public static Rule Symbol					= Node ( MatchChar ( ':' ) + Identifier );
 		public static Rule Value					= Node ( Recursive ( () => String | Number | Hash | Array | True | False | Nil | Symbol ) );
-		public static Rule Pair						= Node ( Expr + ( StringToken ( "=>" ) | Eq ) + Expr );
 		public static Rule Array					= Node ( CharToken ( '[' ) + CommaDelimited ( Value ) + WS + CharToken ( ']' ) );
-		public static Rule Hash						= Node ( CharToken ( '{' ) + CommaDelimited ( Pair ) + WS + CharToken ( '}' ) );
+
+		//----------------------------------------------------------------//
+		/**	@ruby	方法表达式
+			@text	foobar
+					ruby_is_simple
+		*/
+		public static Rule Ellipsis					= MatchChar ( '*' ) + Name;
+		public static Rule ParamList				= Node ( OptParenthesize ( CommaDelimited ( Identifier + WS ) ) );
+		public static Rule Params					= Node ( OptParenthesize ( ( NameList + Opt ( Comma + Ellipsis ) ) | Ellipsis ) );
+		public static Rule NamedFunc				= Node ( Keyword ( "def" ) + Identifier + WS + Params + RecStatement );
+		public static Rule ClassFunc				= Node ( Keyword ( "def" ) + Identifier + ( MatchChar ( '.' ) | MatchString ( "::" ) )  + Params + RecStatement );
+		public static Rule Function					= NamedFunc | ClassFunc;
 
 		//----------------------------------------------------------------//
 		/**	@ruby	表达式Token
 			@text	foobar
 					ruby_is_simple
 		*/
-		public static Rule LastStat					= Node ( ( StringToken ( "return" ) + Opt ( ExprList ) ) | Break | Next | Redo | ExprList );
 		public static Rule FuncName					= Node ( Name + ZeroOrMore ( CharToken ( '.' ) + Name ) + Opt ( ( MatchChar ( '.' ) | MatchString ( "::" ) ) + Name ) );
-		public static Rule Var						= Node ( Name | ( PrefixExpr + CharToken ( '[' ) + Exp + CharToken ( ']' ) ) | ( PrefixExpr + CharToken ( '.' ) + Name ) );
-		public static Rule VarList					= Node ( Var + ZeroOrMore ( Comma + Var ) );
 		public static Rule ArgList					= Node ( Opt ( CharToken ( '(' ) ) + CommaDelimited ( RecExpr ) + Opt ( CharToken ( ')' ) ) );
 		public static Rule IdentifierList			= Node ( Opt ( CharToken ( '(' ) ) + CommaDelimited ( Identifier + WS ) + Opt ( CharToken ( ')' ) ) );
 		public static Rule Index					= Node ( CharToken ( '[' ) + RecExpr + CharToken ( ']' ) );
@@ -95,49 +140,28 @@ namespace Diggins.Jigsaw {
 		public static Rule ParenExpr				= Node ( CharToken ( '(' ) + RecExpr + WS + CharToken ( ')' ) );
 		public static Rule NewExpr					= Node ( Keyword ( "new" ) + Recursive ( () => PostfixExpr ) );
 		public static Rule LeafExpr					= ParenExpr | NewExpr | Function | Literal | Identifier;
-		public static Rule PrefixExpr				= Node ( Var | FunCall | ParanExpr );
+		public static Rule PrefixExpr				= Node ( PrefixOp + Recursive ( () => PrefixOrLeafExpr ) );
 		public static Rule PrefixOrLeafExpr			= PrefixExpr | LeafExpr;
 		public static Rule PostfixOp				= Field | Index | ArgList;
 		public static Rule PostfixExpr				= Node ( PrefixOrLeafExpr + WS + OneOrMore ( PostfixOp + WS ) );
 		public static Rule UnaryExpr				= PostfixExpr | PrefixOrLeafExpr;
-		public static Rule Ellipsis					= MatchChar ( '*' ) + Name;
-		public static Rule ParanExpr				= Node ( Parenthesize ( Expr ) );
 		public static Rule BinaryOp					= Node ( MatchStringSet ( "<= >= == != << >> && || and or < > & | + - * % /" ) );
 		public static Rule BinaryExpr				= Node ( UnaryExpr + WS + BinaryOp + WS + RecExpr );
 		public static Rule AssignOp					= Node ( MatchStringSet ( "&&= ||= >>= <<= += -= *= %= /= &s= |= ^= =" ) );
 		public static Rule AssignExpr				= Node ( ( Identifier | PostfixExpr ) + WS + AssignOp + WS + RecExpr );
 		public static Rule TertiaryExpr				= Node ( ( AssignExpr | BinaryExpr | UnaryExpr ) + WS + CharToken ( '?' ) + RecExpr + CharToken ( ':' ) + RecExpr + WS );
-		public static Rule FunExpr					= Node ( Keyword ( "def" ) + FuncBody );
-		public static Rule Expr						= Node ( ( Nil | False | True | Number | String | FunExpr | PrefixExpr | Hash | TertiaryExpr | AssignExpr | BinaryExpr | UnaryExpr ) + WS );
+		public static Rule Expr						= Node ( ( Nil | False | True | Number | String | PrefixExpr | TertiaryExpr | AssignExpr | BinaryExpr | UnaryExpr ) + WS );
 		public static Rule ExprList					= Node ( Expr + ZeroOrMore ( Comma + Expr ) );
 
-		//----------------------------------------------------------------//
-		/**	@ruby	变量和常量
-			@text	foobar
-					ruby_is_simple
-		*/
-		public static Rule Name						= Node ( Identifier );
-		public static Rule NameList					= Node ( Name + ZeroOrMore ( Comma + Name ) );
-		public static Rule IdentFirstChar			= MatchChar ( c => Char.IsLetter ( c ) || c == '_' );
-		public static Rule IdentNextChar			= MatchChar ( c => Char.IsLetterOrDigit ( c ) || c == '_' );
-		public static Rule Identifier				= IdentFirstChar + ZeroOrMore ( IdentNextChar );
-		public static Rule LocalVariable			= Node ( Identifier + WS );
-		public static Rule GlobalVariable			= Node ( MatchChar ( '$' ) + Identifier + WS );
-		public static Rule InstanceVariable			= Node ( MatchChar ( '@' ) + Identifier + WS );
-		public static Rule Constants				= Node ( CharRange ( 'A', 'Z' ) + ZeroOrMore ( CharRange ( 'A', 'Z' ) ) + WS );
+		public static Rule ParanExpr				= Node ( Parenthesize ( Expr ) );
 
-		//----------------------------------------------------------------//
-		/**	@ruby	方法表达式
-			@text	foobar
-					ruby_is_simple
-		*/
-		public static Rule ParamList				= Node ( OptParenthesize ( CommaDelimited ( Identifier + WS ) ) );
+		public static Rule Pair						= Node ( Expr + ( StringToken ( "=>" ) | Eq ) + Expr );
+		public static Rule Hash						= Node ( CharToken ( '{' ) + CommaDelimited ( Pair ) + WS + CharToken ( '}' ) );
+		
+		public static Rule Var						= Node ( Name | ( PrefixExpr + CharToken ( '[' ) + Exp + CharToken ( ']' ) ) | ( PrefixExpr + CharToken ( '.' ) + Name ) );
+		public static Rule VarList					= Node ( Var + ZeroOrMore ( Comma + Var ) );
 		public static Rule FunCall					= Node ( PrefixExpr + Opt ( CharToken ( '.' ) + Name ) );
-		public static Rule Params					= Node ( OptParenthesize ( ( NameList + Opt ( Comma + Ellipsis ) ) | Ellipsis ) );
-		public static Rule NamedFunc				= Node ( Keyword ( "def" ) + Identifier + WS + Params + RecStatement );
-		public static Rule ClassFunc				= Node ( Keyword ( "def" ) + Identifier + ( MatchChar ( '.' ) | MatchString ( "::" ) )  + Params + RecStatement );
-		public static Rule Function					= NamedFunc | ClassFunc;
-		public static Rule FuncBody					= Node ( Parenthesize ( Opt ( Params ) ) + Block + WS + Keyword ( "end" ) );
+
 
 		//----------------------------------------------------------------//
 		/**	@ruby	Assignment
@@ -149,34 +173,21 @@ namespace Diggins.Jigsaw {
 		public static Rule AssignmentExpr			= ( LocalVariable | GlobalVariable | InstanceVariable | Constants | Expr ) + MatchChar ( '=' ) + Expr + Opt ( Eos );
 
 		//----------------------------------------------------------------//
-		/**	@ruby	注释
-			@text	# 这是单行注释
-			@text	=begin
-					这是多行注释
-					=end
-		*/
-		public static Rule LineComment				= MatchString ( "#" ) + AdvanceWhileNot ( MatchChar ( '\n' ) );
-		public static Rule FullComment				= MatchString ( "=begin" ) + AdvanceWhileNot ( MatchString ( "=end" ) );
-
-		//----------------------------------------------------------------//
-		/**	@ruby	Recursive rules defined at the top
-		*/
-		public static Rule RecBlock					= Recursive ( () => Block );
-		public static Rule RecExpr					= Recursive ( () => Expr );
-		public static Rule RecStatement				= Recursive ( () => Statement );
-		public static Rule Literal					= Recursive ( () => String | Fixnum | Float | Hash | Array | True | False | Nil | Symbol );
-
-		//----------------------------------------------------------------//
 		/**	@ruby	Statement rules
 		*/
 		public static Rule Alias					= Node ( Keyword ( "alias" ) + ( Identifier | Symbol ) + WS + ( Identifier | Symbol ) + WS + Opt ( Eos ) );
 		public static Rule Undef					= Node ( Keyword ( "undef" ) + ( Identifier | Symbol ) + WS + Opt ( Eos ) );
-		public static Rule Block					= Node ( ZeroOrMore ( Statement + Opt ( Eos ) ) + Opt ( LastStat + Opt ( Eos ) ) );
+		public static Rule Raise					= Node ( Keyword ( "raise" ) + Expr + WS + Opt ( Eos ) );
+		public static Rule Defined					= Node ( Keyword ( "defined?" ) + OptParenthesize ( Expr ) + WS + Opt ( Eos ) );
+		public static Rule Next						= Node ( Keyword ( "next" ) + WS + Opt ( Eos ) );
+		public static Rule Redo						= Node ( Keyword ( "redo" ) + WS + Opt ( Eos ) );
+		public static Rule Break					= Node ( Keyword ( "break" ) + WS + Opt ( Eos ) );
+		public static Rule Return					= Node ( Keyword ( "return" ) + Opt ( Expr ) + WS + Opt ( Eos ) );
+		public static Rule LastStat					= Node ( ( StringToken ( "return" ) + Opt ( ExprList ) ) | Break | Next | Redo | ExprList );
 		public static Rule Class					= Node ( Keyword ( "class" ) + ( ( Identifier + Opt ( Keyword ( "<" ) + Identifier ) ) | ( Keyword ( "<<" ) + Expr ) )  + RecExpr + WS + Keyword ( "end" ) );
 		public static Rule Module					= Node ( Keyword ( "module" ) + Identifier + RecExpr + WS + Keyword ( "end" ) );
 		public static Rule Range					= Node ( Expr + ( StringToken ( ".." ) | StringToken ( "..." ) )  + Expr );
 		public static Rule VarDecl					= Node ( Keyword ( "var" ) + Identifier + WS + Opt ( Eq + Expr ) + Opt ( Eos ) );
-		public static Rule FunDefStatement			= Node ( Keyword ( "def" ) + FuncName + WS + FuncBody );
 		public static Rule While					= Node ( Keyword ( "while" ) + OptParenthesize ( Expr ) + Opt ( Keyword ( "do" ) ) + RecStatement + WS + Keyword ( "end" ) );
 		public static Rule Until					= Node ( Keyword ( "until" ) + OptParenthesize ( Expr ) + Opt ( Keyword ( "do" ) ) + RecStatement + WS + Keyword ( "end" ) );
 		public static Rule For						= Node ( Keyword ( "for" ) + Identifier + WS + Keyword ( "in" ) + Expr + WS + Opt ( Keyword ( "do" ) ) + RecStatement + WS + Keyword ( "end" ) );
@@ -186,23 +197,17 @@ namespace Diggins.Jigsaw {
 		public static Rule Case						= Node ( Keyword ( "case" ) + Expr + OneOrMore ( Keyword ( "when" ) + RecStatement + Opt ( Keyword ( "then" ) ) )  + Opt ( Else ) + WS + Keyword ( "end" ) );
 		public static Rule Unless					= Node ( Keyword ( "unless" ) + OptParenthesize ( Expr ) + Opt ( Keyword ( "then" ) ) + RecStatement + Opt ( Else ) + WS + Keyword ( "end" ) );
 		public static Rule ExprStatement			= Node ( Expr + WS + Opt ( Eos ) );
-		public static Rule Raise					= Node ( Keyword ( "raise" ) + Expr + WS + Opt ( Eos ) );
-		public static Rule Defined					= Node ( Keyword ( "defined?" ) + OptParenthesize ( Expr ) + WS + Opt ( Eos ) );
-		public static Rule Next						= Node ( Keyword ( "next" ) + WS + Opt ( Eos ) );
-		public static Rule Redo						= Node ( Keyword ( "redo" ) + WS + Opt ( Eos ) );
-		public static Rule Break					= Node ( Keyword ( "break" ) + WS + Opt ( Eos ) );
-		public static Rule Return					= Node ( Keyword ( "return" ) + Opt ( Expr ) + WS + Opt ( Eos ) );
 		public static Rule Empty					= Node ( WS + Opt ( Eos ) );
-		public static Rule Statement				= FunDefStatement | Block | Case | For | While | Until | Unless | If | Return | Raise | Next | Redo | Break | VarDecl | ExprStatement | Empty;
+		public static Rule Statement				= Case | For | While | Until | Unless | If | Return | Raise | Next | Redo | Break | VarDecl | ExprStatement | Empty;
+
+		public static Rule Block					= Node ( ZeroOrMore ( Statement + Opt ( Eos ) ) + Opt ( LastStat + Opt ( Eos ) ) );
+		public static Rule FuncBody					= Node ( OptParenthesize ( Opt ( Params ) ) + Block + WS + Keyword ( "end" ) );
+		public static Rule FunDefStatement			= Node ( Keyword ( "def" ) + FuncName + WS + FuncBody );
+		public static Rule FunExpr					= Node ( Keyword ( "def" ) + FuncBody );
 
 		public static Rule CharToken (char c) { return MatchChar ( c ) + WS; }
 		public static Rule StringToken (string s) { return MatchString ( s ) + WS; }
 		public static Rule CommaDelimited (Rule r) { return Opt ( r + ( ZeroOrMore ( CharToken ( ',' ) + r ) + Opt ( CharToken ( ',' ) ) ) ); }
-
-		public static Rule Comma					= CharToken ( ',' );
-		public static Rule Eos						= CharToken ( ';' );
-		public static Rule Eq						= CharToken ( '=' );
-		public static Rule Dot						= CharToken ( '.' );
 
 		public static Rule MatchAnyString (params string[] xs) { return Choice ( xs.Select ( x => MatchString ( x ) ).ToArray () ); }
 		public static Rule MatchStringSet (string s) { return MatchAnyString ( s.Split ( ' ' ) ); }
@@ -214,7 +219,7 @@ namespace Diggins.Jigsaw {
 		//----------------------------------------------------------------//
 		/**	@ruby	The top-level rule
 		*/
-		public static Rule Script = Node ( ZeroOrMore ( Statement ) + WS + End );
+		public static Rule Script					= Node ( ZeroOrMore ( Statement ) + WS + End );
 
 
 		// Grammar initiatlization

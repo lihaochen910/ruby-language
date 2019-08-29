@@ -6,28 +6,31 @@ using System.Diagnostics;
 
 namespace Diggins.Jigsaw
 {
-    public class JavaScriptEvaluator : Evaluator
+    public class RubyEvaluator : Evaluator
     {
 		#region fields
-        bool isReturning = false;
+		Machine vm;
+		bool isReturning = false;
         dynamic result = null;
         #endregion fields
 
-        public JavaScriptEvaluator()
+        public RubyEvaluator()
         {
-            // This is where you could add all sorts of primitive objects and functions. Or don't. Fine.
-            AddBinding("alert", new JSPrimitive(args => { Console.WriteLine(args[0]); }));
-        }
+			vm = new Machine ();
 
-        #region static functions
-        public static dynamic RunScript(string s)
+			// This is where you could add all sorts of primitive objects and functions. Or don't. Fine.
+			AddBinding ( "print", new RubyPrimitive ( args => { Console.WriteLine ( args[0] ); } ) );
+		}
+
+		#region static functions
+		public static dynamic RunScript(string s)
         {
-            return new JavaScriptEvaluator().Eval(s, JavaScriptGrammar.Script);
+            return new RubyEvaluator().Eval(s, RubyGrammar.Script);
         }
 
         public static dynamic EvalExpression(string s)
         {
-            return new JavaScriptEvaluator().Eval(s, JavaScriptGrammar.Expr);
+            return new RubyEvaluator().Eval(s, RubyGrammar.Expr);
         }
         #endregion
 
@@ -35,7 +38,7 @@ namespace Diggins.Jigsaw
         /// <summary>
         /// Represents a JavaScript function. Note that a function is also an object.
         /// </summary>
-        public class JSFunction : JsonObject
+        public class RubyFunction : RubyObject
         {
             public static int FuncCount = 0;
             public Node node;
@@ -44,10 +47,10 @@ namespace Diggins.Jigsaw
             public string name = String.Format("_anonymous_{0}", FuncCount++);
             public Node body;
 
-            public JSFunction()
-            { }
+			public RubyFunction () : base ( new RubyClass ( "Function" ) ) 
+			{ }
 
-            public JSFunction(VarBindings c, Node n) { 
+            public RubyFunction(VarBindings c, Node n) : base ( new RubyClass ( "Function" ) ) { 
                 capture = c;  
                 node = n;
                 if (n.Count == 3)
@@ -63,7 +66,7 @@ namespace Diggins.Jigsaw
                 }
             }
 
-            public virtual dynamic Apply(JavaScriptEvaluator e, dynamic self, params dynamic[] args)
+            public virtual dynamic Apply(RubyEvaluator e, dynamic self, params dynamic[] args)
             {
                 var originalContext = e.env;
                 var originalReturningState = e.isReturning;
@@ -97,31 +100,31 @@ namespace Diggins.Jigsaw
         /// <summary>
         /// Represents a built-in function. 
         /// </summary>
-        public class JSPrimitive : JSFunction
+        public class RubyPrimitive : RubyFunction
         {
             Func<dynamic, dynamic[], dynamic> func;
 
-            public JSPrimitive(Func<dynamic, dynamic[], dynamic> func)
+            public RubyPrimitive(Func<dynamic, dynamic[], dynamic> func)
             {
                 this.func = func;
             }
 
-            public JSPrimitive(Action<dynamic, dynamic[]> action)
+            public RubyPrimitive(Action<dynamic, dynamic[]> action)
             {
                 this.func = (self, args) => { action(self, args); return null; };
             }
 
-            public JSPrimitive(Action<dynamic[]> action)
+            public RubyPrimitive(Action<dynamic[]> action)
             {
                 this.func = (self, args) => { action(args); return null; };
             }
 
-            public JSPrimitive(Func<dynamic[], dynamic> function)
+            public RubyPrimitive(Func<dynamic[], dynamic> function)
             {
                 this.func = (self, args) => function(args); 
             }
 
-            public override dynamic Apply(JavaScriptEvaluator e, dynamic self, params dynamic[] args)
+            public override dynamic Apply(RubyEvaluator e, dynamic self, params dynamic[] args)
             {
                 return func(self, args);
             }
@@ -131,7 +134,7 @@ namespace Diggins.Jigsaw
         public dynamic Eval(string s, Rule r)
         {
             var nodes = r.Parse(s);
-            var root = JavaScriptTransformer.Transform(nodes[0]);
+            var root = RubyTransformer.Transform(nodes[0]);
             return Eval(root);
         }
 
@@ -170,7 +173,7 @@ namespace Diggins.Jigsaw
                     return EvalScoped(() => EvalNodes(n.Nodes));
                 case "AnonFunc":
                     // Creates an unnamed function
-                    return new JSFunction(env, n);
+                    return new RubyFunction(env, n);
                 case "Block":
                     // Execute a sequence of instructions
                     return EvalScoped(() => EvalNodes(n.Nodes));
@@ -344,7 +347,7 @@ namespace Diggins.Jigsaw
                 case "False":
                     // A false value
                     return false;
-                case "Null":
+                case "Nil":
                     // A null value.
                     return null;
                 default:
