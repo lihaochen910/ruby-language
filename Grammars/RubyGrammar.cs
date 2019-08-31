@@ -15,7 +15,7 @@ namespace Diggins.Jigsaw {
 		public static Rule RecBlock					= Recursive ( () => Block );
 		public static Rule RecExpr					= Recursive ( () => Expr );
 		public static Rule RecStatement				= Recursive ( () => Statement );
-		public static Rule Literal					= Recursive ( () => String | Float | Fixnum | Hash | Array | True | False | Nil | Symbol );
+		public static Rule Literal					= Recursive ( () => String | Number | Hash | Array | True | False | Nil | Symbol );
 
 		//----------------------------------------------------------------//
 		/**	@ruby	字符串Token
@@ -38,8 +38,9 @@ namespace Diggins.Jigsaw {
 					这是多行注释
 					=end
 		*/
-		public static Rule LineComment				= MatchString ( "#" ) + AdvanceWhileNot ( MatchChar ( '\n' ) );
-		public static Rule FullComment				= MatchString ( "=begin" ) + AdvanceWhileNot ( MatchString ( "=end" ) );
+		public static Rule LineComment				= MatchChar ( '#' ) + AdvanceWhileNot ( WS + MatchChar ( '\n' ) );
+		public static Rule FullComment				= MatchString ( "=begin" ) + AdvanceWhileNot ( WS + MatchString ( "=end" ) );
+		public static Rule Comment					= Node ( LineComment | FullComment );
 
 		//----------------------------------------------------------------//
 		/**	@ruby	数字
@@ -75,9 +76,9 @@ namespace Diggins.Jigsaw {
 		public static Rule E						= ( MatchChar ( 'e' ) | MatchChar ( 'E' ) ) + Opt ( MatchChar ( '+' ) | MatchChar ( '-' ) );
 		public static Rule Exp						= E + Digits;
 		public static Rule Frac						= MatchChar ( '.' ) + Digits;
-		public static Rule Fixnum					= Digits + Not ( MatchChar ( '.' ) );
-		public static Rule Float					= Digits + ( ( Frac + Opt ( Exp ) ) | Exp );
-		public static Rule HexDigit					= MatchString ( "0x" ) + Digit | CharRange ( 'a', 'f' ) | CharRange ( 'A', 'F' );
+		public static Rule Fixnum					= Node ( Digits + Not ( MatchChar ( '.' ) ) );
+		public static Rule Float					= Node ( Digits + ( ( Frac + Opt ( Exp ) ) | Exp ) );
+		public static Rule HexDigit					= Node ( MatchString ( "0x" ) + Digit | CharRange ( 'a', 'f' ) | CharRange ( 'A', 'F' ) );
 		public static Rule Number					= Float | Fixnum | HexDigit;
 
 
@@ -103,20 +104,19 @@ namespace Diggins.Jigsaw {
 			@text	foobar
 					ruby_is_simple
 		*/
-		public static Rule True						= Node ( MatchString ( "true" ) );
-		public static Rule False					= Node ( MatchString ( "false" ) );
-		public static Rule Nil						= Node ( MatchString ( "nil" ) );
+		public static Rule True						= Node ( Keyword ( "true" ) );
+		public static Rule False					= Node ( Keyword ( "false" ) );
+		public static Rule Nil						= Node ( Keyword ( "nil" ) );
 		public static Rule UnicodeChar				= MatchString ( "\\u" ) + HexDigit + HexDigit + HexDigit + HexDigit;
 		public static Rule ControlChar				= MatchChar ( '\\' ) + CharSet ( "\"\'\\/bfnt" );
-		public static Rule ParamChar				= MatchString ( "#{" ) + Identifier + MatchChar ( '}' );
+		public static Rule ParamChar				= Node ( StringToken ( "#{" ) + RecExpr + CharToken ( '}' ) );
 		public static Rule DoubleQuotedString		= Node ( MatchChar ( '"' ) + ZeroOrMore ( UnicodeChar | ControlChar | ExceptCharSet ( "\"\\" ) | ParamChar ) + MatchChar ( '"' ) );
 		public static Rule SingleQuotedString		= Node ( MatchChar ( '\'' ) + ZeroOrMore ( UnicodeChar | ControlChar | ExceptCharSet ( "'\\" ) ) + MatchChar ( '\'' ) );
-		public static Rule LineOrientedString		= Node ( MatchString ( "<<EOF" ) + ZeroOrMore ( UnicodeChar | ControlChar | ExceptCharSet ( "\"\\" ) | ParamChar ) + MatchString ( "EOF" ) );
-		public static Rule String					= Node ( DoubleQuotedString | SingleQuotedString | LineOrientedString );
+		public static Rule LineOrientedString		= Node ( MatchString ( "<<EOF" ) + ZeroOrMore ( UnicodeChar | ControlChar | ParamChar ) + WS + MatchString ( "EOF" ) );
+		public static Rule String					= Node ( DoubleQuotedString | SingleQuotedString /*| LineOrientedString*/ );
 		public static Rule Symbol					= Node ( MatchChar ( ':' ) + Identifier );
-		public static Rule Value					= Node ( Recursive ( () => String | Number | Hash | Array | True | False | Nil | Symbol ) );
-		public static Rule Array					= Node ( CharToken ( '[' ) + CommaDelimited ( Value ) + WS + CharToken ( ']' ) );
-		public static Rule PairName					= Identifier | DoubleQuotedString | SingleQuotedString;
+		public static Rule Array					= Node ( CharToken ( '[' ) + CommaDelimited ( RecExpr ) + WS + CharToken ( ']' ) );
+		public static Rule PairName					= Name | Symbol | DoubleQuotedString | SingleQuotedString;
 		public static Rule Pair						= Node ( PairName + WS + ( StringToken ( "=>" ) | CharToken ( ':' ) | Eq ) + RecExpr + WS );
 		public static Rule Hash						= Node ( CharToken ( '{' ) + CommaDelimited ( Pair ) + WS + CharToken ( '}' ) );
 
@@ -126,9 +126,11 @@ namespace Diggins.Jigsaw {
 					ruby_is_simple
 		*/
 		public static Rule Ellipsis					= MatchChar ( '*' ) + Name;
-		public static Rule Params					= Node ( OptParenthesize ( ( NameList + Opt ( Comma + Ellipsis ) ) | Ellipsis ) );
+		public static Rule BlockParam				= MatchChar ( '&' ) + Name;
+		public static Rule FuncName					= Node ( Name + ZeroOrMore ( CharToken ( '.' ) + Name ) + Opt ( ( MatchChar ( '.' ) | MatchString ( "::" ) ) + Name ) );
+		public static Rule Params					= Node ( Parenthesize ( NameList + ZeroOrMore ( Comma + Ellipsis ) | ZeroOrMore ( Comma + BlockParam ) ) );
 		public static Rule NamedFunc				= Node ( Keyword ( "def" ) + Identifier + WS + Params + RecStatement );
-		public static Rule ClassFunc				= Node ( Keyword ( "def" ) + Identifier + ( MatchChar ( '.' ) | MatchString ( "::" ) )  + Params + RecStatement );
+		public static Rule ClassFunc				= Node ( Keyword ( "def" ) + Identifier + ( MatchChar ( '.' ) | MatchString ( "::" ) ) + Identifier + Params + RecStatement );
 		public static Rule Function					= NamedFunc | ClassFunc;
 
 		//----------------------------------------------------------------//
@@ -136,13 +138,12 @@ namespace Diggins.Jigsaw {
 			@text	foobar
 					ruby_is_simple
 		*/
-		public static Rule FuncName					= Node ( Name + ZeroOrMore ( CharToken ( '.' ) + Name ) + Opt ( ( MatchChar ( '.' ) | MatchString ( "::" ) ) + Name ) );
-		public static Rule ArgList					= Node ( Opt ( CharToken ( '(' ) ) + CommaDelimited ( RecExpr ) + Opt ( CharToken ( ')' ) ) );
+		public static Rule ArgList					= Node ( CharToken ( '(' ) + CommaDelimited ( RecExpr ) + CharToken ( ')' ) );
 		public static Rule Index					= Node ( CharToken ( '[' ) + RecExpr + CharToken ( ']' ) );
 		public static Rule Field					= Node ( CharToken ( '.' ) + Identifier );
-		public static Rule PrefixOp					= Node ( MatchStringSet ( "! - ~ not" ) );
 		public static Rule ParenExpr				= Node ( CharToken ( '(' ) + RecExpr + WS + CharToken ( ')' ) );
-		public static Rule LeafExpr					= ParenExpr | Literal | Variable;
+		public static Rule PrefixOp					= Node ( MatchStringSet ( "! - ~" ) );
+		public static Rule LeafExpr					= ParenExpr | Literal | Variable | Identifier;
 		public static Rule PrefixExpr				= Node ( PrefixOp + Recursive ( () => PrefixOrLeafExpr ) );
 		public static Rule PrefixOrLeafExpr			= PrefixExpr | LeafExpr;
 		public static Rule PostfixOp				= Field | Index | ArgList;
@@ -183,11 +184,10 @@ namespace Diggins.Jigsaw {
 		public static Rule Redo						= Node ( Keyword ( "redo" ) + WS + Opt ( Eos ) );
 		public static Rule Break					= Node ( Keyword ( "break" ) + WS + Opt ( Eos ) );
 		public static Rule Return					= Node ( Keyword ( "return" ) + Opt ( Expr ) + WS + Opt ( Eos ) );
-		public static Rule LastStat					= Node ( ( StringToken ( "return" ) + Opt ( ExprList ) ) | Break | Next | Redo | ExprList );
+		public static Rule LastStat					= Node ( ( Keyword ( "return" ) + Opt ( ExprList ) ) | Break | Next | Redo | ExprList );
 		public static Rule Class					= Node ( Keyword ( "class" ) + ( ( Identifier + Opt ( Keyword ( "<" ) + Identifier ) ) | ( Keyword ( "<<" ) + Expr ) )  + RecExpr + WS + Keyword ( "end" ) );
 		public static Rule Module					= Node ( Keyword ( "module" ) + Identifier + RecExpr + WS + Keyword ( "end" ) );
 		//public static Rule Range					= Node ( Expr + ( StringToken ( ".." ) | StringToken ( "..." ) )  + Expr );
-		public static Rule VarDecl					= Node ( Keyword ( "var" ) + Identifier + WS + Opt ( Eq + Expr ) + Opt ( Eos ) );
 		public static Rule While					= Node ( Keyword ( "while" ) + OptParenthesize ( Expr ) + Opt ( Keyword ( "do" ) ) + RecStatement + WS + Keyword ( "end" ) );
 		public static Rule Until					= Node ( Keyword ( "until" ) + OptParenthesize ( Expr ) + Opt ( Keyword ( "do" ) ) + RecStatement + WS + Keyword ( "end" ) );
 		public static Rule For						= Node ( Keyword ( "for" ) + Identifier + WS + Keyword ( "in" ) + Expr + WS + Opt ( Keyword ( "do" ) ) + RecStatement + WS + Keyword ( "end" ) );
@@ -198,7 +198,7 @@ namespace Diggins.Jigsaw {
 		public static Rule Unless					= Node ( Keyword ( "unless" ) + OptParenthesize ( Expr ) + Opt ( Keyword ( "then" ) ) + RecStatement + Opt ( Else ) + WS + Keyword ( "end" ) );
 		public static Rule ExprStatement			= Node ( Expr + WS + Opt ( Eos ) );
 		public static Rule Empty					= Node ( WS + Opt ( Eos ) );
-		public static Rule Statement				= Case | For | While | Until | Unless | If | Return | Raise | Next | Redo | Break | VarDecl | ExprStatement | Empty;
+		public static Rule Statement				= Case | For | While | Until | Unless | If | Return | Raise | Next | Redo | Break | ExprStatement | Empty;
 
 		public static Rule Block					= Node ( ZeroOrMore ( Statement + Opt ( Eos ) ) + Opt ( LastStat + Opt ( Eos ) ) );
 		public static Rule FuncBody					= Node ( OptParenthesize ( Opt ( Params ) ) + Block + WS + Keyword ( "end" ) );
