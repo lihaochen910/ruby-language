@@ -73,6 +73,10 @@
     <Compile Include="Evaluators\RubyLanguage\RubyVM.cs" />
     <Compile Include="Evaluators\RubyLanguage\Symbol.cs" />
     <Compile Include="Grammars\RubyGrammar.cs" />
+    <Compile Include="New\RubyASTNode.cs" />
+    <Compile Include="New\RubyASTNodeType.cs" />
+    <Compile Include="New\RubyGrammar.cs" />
+    <Compile Include="PegParser.cs" />
     <Compile Include="Tests\JavaScriptCompilerTests.cs" />
     <Compile Include="Tests\RubyTests.cs" />
     <Compile Include="Transformers\RubyTransformer.cs" />
