@@ -53,7 +53,7 @@ namespace Diggins.Jigsaw
         {
             var state = new ParserState() { input = input, pos = 0 };
             if (!Match(state))
-                throw new Exception(String.Format("Rule {0} failed to match", Name));
+                throw new Exception(String.Format("Rule: {0} failed to match", Name));
             return state.nodes;
         }
 

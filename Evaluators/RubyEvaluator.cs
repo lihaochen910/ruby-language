@@ -332,7 +332,7 @@ namespace Diggins.Jigsaw
                 case "Array":
                     // An array literal value
                     return n.Nodes.Select(Eval).ToArray();
-                case "Integer":
+                case "Fixnum":
                     // An integer literal value
                     return Int32.Parse(n.Text);
                 case "Float":
