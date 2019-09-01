@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using Peg;
@@ -13,80 +14,85 @@ namespace Ruby {
 	/// </summary>
 	public abstract class RubyAstNode {
 
-		string msText;
+		string mText;
 		ASTNodeType mLabel;
 
 		public RubyAstNode (PegAstNode node) {
 			if ( node.GetLabel () != null )
 				mLabel = (ASTNodeType)node.GetLabel ();
 			else
-				mLabel = ASTNodeType.AstRoot;
+				mLabel = ASTNodeType.SELF;
 
-			msText = node.ToString ();
+			mText = node.ToString ();
 		}
 
 		public RubyAstNode (ASTNodeType label, string sText) {
 			mLabel = label;
-			msText = sText;
+			mText = sText;
 		}
 
 		public static RubyAstNode Create (PegAstNode node) {
 			ASTNodeType label = (ASTNodeType)node.GetLabel ();
+
+			if ( node.GetLabel () != null ) {
+				return new RubyTestAstNode ( label, node.ToString () );
+			}
+
 			switch ( label ) {
-				case ASTNodeType.AstRoot:
-					return new AstRoot ( node );
-				case ASTNodeType.Def:
-					return new AstDef ( node );
-				case ASTNodeType.Name:
-					return new AstName ( node );
-				case ASTNodeType.Param:
-					return new AstParam ( node );
-				case ASTNodeType.Lambda:
-					return new AstLambda ( node );
-				case ASTNodeType.Quote:
-					return new AstQuote ( node );
-				case ASTNodeType.Char:
-					return new AstChar ( node );
-				case ASTNodeType.String:
-					return new AstString ( node );
-				case ASTNodeType.Float:
-					return new AstFloat ( node );
-				case ASTNodeType.Int:
-					return new AstInt ( node );
-				case ASTNodeType.Bin:
-					return new AstBin ( node );
-				case ASTNodeType.Hex:
-					return new AstHex ( node );
-				case ASTNodeType.Stack:
-					return new AstStack ( node );
-				case ASTNodeType.FxnType:
-					return new AstFxnType ( node );
-				case ASTNodeType.TypeVar:
-					return new AstTypeVar ( node );
-				case ASTNodeType.TypeName:
-					return new AstSimpleType ( node );
-				case ASTNodeType.StackVar:
-					return new AstStackVar ( node );
-				case ASTNodeType.MacroRule:
-					return new AstMacro ( node );
-				case ASTNodeType.MacroProp:
-					return new AstMacro ( node );
-				case ASTNodeType.MacroPattern:
-					return new AstMacroPattern ( node );
-				case ASTNodeType.MacroQuote:
-					return new AstMacroQuote ( node );
-				case ASTNodeType.MacroTypeVar:
-					return new AstMacroTypeVar ( node );
-				case ASTNodeType.MacroStackVar:
-					return new AstMacroStackVar ( node );
-				case ASTNodeType.MacroName:
-					return new AstMacroName ( node );
-				case ASTNodeType.MetaDataContent:
-					return new AstMetaDataContent ( node );
-				case ASTNodeType.MetaDataLabel:
-					return new AstMetaDataLabel ( node );
-				case ASTNodeType.MetaDataBlock:
-					return new AstMetaDataBlock ( node );
+				//case ASTNodeType.AstRoot:
+				//	return new AstRoot ( node );
+				//case ASTNodeType.Def:
+				//	return new AstDef ( node );
+				//case ASTNodeType.Name:
+				//	return new AstName ( node );
+				//case ASTNodeType.Param:
+				//	return new AstParam ( node );
+				//case ASTNodeType.Lambda:
+				//	return new AstLambda ( node );
+				//case ASTNodeType.Quote:
+				//	return new AstQuote ( node );
+				//case ASTNodeType.Char:
+				//	return new AstChar ( node );
+				//case ASTNodeType.String:
+				//	return new AstString ( node );
+				//case ASTNodeType.Float:
+				//	return new AstFloat ( node );
+				//case ASTNodeType.Int:
+				//	return new AstInt ( node );
+				//case ASTNodeType.Bin:
+				//	return new AstBin ( node );
+				//case ASTNodeType.Hex:
+				//	return new AstHex ( node );
+				//case ASTNodeType.Stack:
+				//	return new AstStack ( node );
+				//case ASTNodeType.FxnType:
+				//	return new AstFxnType ( node );
+				//case ASTNodeType.TypeVar:
+				//	return new AstTypeVar ( node );
+				//case ASTNodeType.TypeName:
+				//	return new AstSimpleType ( node );
+				//case ASTNodeType.StackVar:
+				//	return new AstStackVar ( node );
+				//case ASTNodeType.MacroRule:
+				//	return new AstMacro ( node );
+				//case ASTNodeType.MacroProp:
+				//	return new AstMacro ( node );
+				//case ASTNodeType.MacroPattern:
+				//	return new AstMacroPattern ( node );
+				//case ASTNodeType.MacroQuote:
+				//	return new AstMacroQuote ( node );
+				//case ASTNodeType.MacroTypeVar:
+				//	return new AstMacroTypeVar ( node );
+				//case ASTNodeType.MacroStackVar:
+				//	return new AstMacroStackVar ( node );
+				//case ASTNodeType.MacroName:
+				//	return new AstMacroName ( node );
+				//case ASTNodeType.MetaDataContent:
+				//	return new AstMetaDataContent ( node );
+				//case ASTNodeType.MetaDataLabel:
+				//	return new AstMetaDataLabel ( node );
+				//case ASTNodeType.MetaDataBlock:
+				//	return new AstMetaDataBlock ( node );
 				default:
 					throw new Exception ( "unrecognized node type in AST tree: " + label );
 			}
@@ -111,11 +117,11 @@ namespace Ruby {
 		}
 
 		public override string ToString () {
-			return msText;
+			return mText;
 		}
 
 		public void SetText (string s) {
-			msText = s;
+			mText = s;
 		}
 
 		public string IndentedString (int nIndent, string s) {
@@ -131,6 +137,14 @@ namespace Ruby {
 	}
 
 
+	public class RubyTestAstNode : RubyAstNode {
+		public RubyTestAstNode (ASTNodeType nodeType, string sText)
+			: base ( nodeType, sText ) {
+
+		}
+	}
+
+
 	/// <summary>
 	/// A program consists of a sequence of statements 
 	/// TODO: reintroduce declarations and macros
@@ -138,9 +152,9 @@ namespace Ruby {
 	public class RubyScript : RubyAstNode {
 		public List<RubyAstNode> mStatements = new List<RubyAstNode> ();
 
-		public RubyScript (Peg.PegAstNode node)
+		public RubyScript (PegAstNode node)
 			: base ( node ) {
-			foreach ( Peg.PegAstNode child in node.GetChildren () ) {
+			foreach ( PegAstNode child in node.GetChildren () ) {
 				RubyAstNode statement = RubyAstNode.Create ( child );
 				mStatements.Add ( statement );
 			}

@@ -5,6 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Diagnostics;
+using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace Peg
 {
@@ -36,6 +38,10 @@ namespace Peg
             return mIndex;
         }
 
+		public string Input {
+			get { return mData; }
+		}
+
         public string CurrentLine
         {
             get
@@ -60,7 +66,7 @@ namespace Peg
                     }
                 }
                 int nCol = mIndex - nLastLineChar;
-                ret += "CatProgram " + nLine.ToString() + ", Column " + nCol + "\n";
+                ret += "Script " + nLine.ToString() + ", Column " + nCol + "\n";
 
                 int nNextLine = mIndex;
                 while (nNextLine < mData.Length && !mData[nNextLine].Equals('\n'))
@@ -73,7 +79,22 @@ namespace Peg
             }
         }
 
-        public void SetPos(int pos)
+		public SourceLocation ParserLocation {
+			get {
+				int nLine = 0;
+				int nLastLineChar = 0;
+				for ( int i = 0; i < mIndex; ++i ) {
+					if ( mData[i].Equals ( '\n' ) ) {
+						nLine++;
+						nLastLineChar = i;
+					}
+				}
+				int nCol = mIndex - nLastLineChar;
+				return new SourceLocation ( mIndex, nLine, nCol );
+			}
+		}
+
+		public void SetPos(int pos)
         {
             mIndex = pos;
         }
@@ -245,7 +266,15 @@ namespace Peg
         {
             public abstract bool Match(Parser p);
 
-            public override string ToString()
+			public static Rule operator + (Rule r1, Rule r2) {
+				return Grammar.Seq ( r1, r2 );
+			}
+
+			public static Rule operator | (Rule r1, Rule r2) {
+				return Grammar.Choice ( r1, r2 );
+			}
+
+			public override string ToString()
             {
                 return "";
             }
@@ -753,7 +782,29 @@ namespace Peg
             Rule mTerm;
         }
 
-        public static Rule EndOfInput() { return new EndOfInputRule(); }
+		public class RegexRule : Rule {
+			
+			public RegexRule (Regex re) {
+				this.re = re;
+			}
+
+			public override bool Match (Parser p) {
+				if ( p.AtEnd () ) return false;
+
+				var m = re.Match ( p.Input, p.GetPos () );
+				if ( m == null || m.Index != p.GetPos () ) return false;
+				p.SetPos ( p.GetPos () + m.Length );
+				return true;
+			}
+
+			public override string ToString() {
+				return String.Format ( "regex({0})", re.ToString () );
+			}
+
+			Regex re;
+		}
+
+		public static Rule EndOfInput() { return new EndOfInputRule(); }
         public static Rule Delay(RuleDelegate r) { return new DelayRule(r); }
         public static Rule SingleChar(char c) { return new SingleCharRule(c); }
         public static Rule CharSeq(string s) { return new CharSeqRule(s); }
@@ -767,11 +818,12 @@ namespace Peg
         public static Rule Seq(Rule x0, Rule x1, Rule x2) { return new SeqRule(new Rule[] { x0, x1, x2 }); }
         public static Rule Seq(Rule x0, Rule x1, Rule x2, Rule x3) { return new SeqRule(new Rule[] { x0, x1, x2, x3 }); }
         public static Rule Seq(Rule x0, Rule x1, Rule x2, Rule x3, Rule x4) { return new SeqRule(new Rule[] { x0, x1, x2, x3, x4 }); }
-        public static Rule Seq(Rule x0, Rule x1, Rule x2, Rule x3, Rule x4, Rule x5) { return new SeqRule(new Rule[] { x0, x1, x2, x3, x4, x5 }); }
-        public static Rule Choice(Rule x0, Rule x1) { return new ChoiceRule(new Rule[] { x0, x1 }); }
+		public static Rule Seq (params Rule[] rs) { return new SeqRule ( rs ); }
+		public static Rule Choice(Rule x0, Rule x1) { return new ChoiceRule(new Rule[] { x0, x1 }); }
         public static Rule Choice(Rule x0, Rule x1, Rule x2) { return new ChoiceRule(new Rule[] { x0, x1, x2 }); }
         public static Rule Choice(Rule x0, Rule x1, Rule x2, Rule x3) { return new ChoiceRule(new Rule[] { x0, x1, x2, x3 }); }
         public static Rule Choice(Rule x0, Rule x1, Rule x2, Rule x3, Rule x4) { return new ChoiceRule(new Rule[] { x0, x1, x2, x3, x4 }); }
+        public static Rule Choice(params Rule[] rs) { return new ChoiceRule(rs); }
         public static Rule Opt(Rule x) { return new OptRule(x); }
         public static Rule Star(Rule x) { return new StarRule(x); }
         public static Rule Plus(Rule x) { return new PlusRule(x); }
@@ -782,6 +834,7 @@ namespace Peg
         public static Rule UpperCaseLetter() { return CharRange('A', 'Z'); }
         public static Rule Letter() { return Choice(LowerCaseLetter(), UpperCaseLetter()); }
         public static Rule Digit() { return CharRange('0', '9'); }
+        public static Rule Digits() { return Plus ( Digit () ); }
         public static Rule HexDigit() { return Choice(Digit(), Choice(CharRange('a', 'f'), CharRange('A', 'F'))); }
         public static Rule BinaryDigit() { return CharSet("01"); }
         public static Rule IdentFirstChar() { return Choice(SingleChar('_'), Letter()); }
@@ -789,5 +842,92 @@ namespace Peg
         public static Rule Ident() { return Seq(IdentFirstChar(), Star(IdentNextChar())); }
         public static Rule EOW() { return Not(IdentNextChar()); }
         public static Rule DelimitedGroup(String x, Rule r, String y) { return Seq(CharSeq(x), Star(r), NoFail(CharSeq(y), "expected " + y)); }
-    }
+		public static Rule Regex (string s) { return new RegexRule ( new Regex ( s ) ); }
+		public static Rule AnyString (params string[] xs) { return Choice ( xs.Select ( x => CharSeq ( x ) ).ToArray () ); }
+		public static Rule StringSet (string s) { return AnyString ( s.Split ( ' ' ) ); }
+	}
+
+	public struct SourceLocation : IEquatable<SourceLocation> {
+		private readonly int _column;
+		private readonly int _index;
+		private readonly int _line;
+
+		public int Column => _column;
+
+		public int Index => _index;
+
+		public int Line => _line;
+
+		public SourceLocation (int index, int line, int column) {
+			_index = index;
+			_line = line;
+			_column = column;
+		}
+
+		public static bool operator != (SourceLocation left, SourceLocation right) {
+			return !left.Equals ( right );
+		}
+
+		public static bool operator == (SourceLocation left, SourceLocation right) {
+			return left.Equals ( right );
+		}
+
+		public override bool Equals (object obj) {
+			if ( obj is SourceLocation ) {
+				return Equals ( (SourceLocation)obj );
+			}
+			return base.Equals ( obj );
+		}
+
+		public bool Equals (SourceLocation other) {
+			return other.GetHashCode () == GetHashCode ();
+		}
+
+		public override int GetHashCode () {
+			return 0xB1679EE ^ Index ^ Line ^ Column;
+		}
+	}
+
+	public struct SourceSpan : IEquatable<SourceSpan> {
+		private readonly SourceLocation _end;
+		private readonly SourceLocation _start;
+
+		public SourceLocation End => _end;
+
+		public int Length => _end.Index - _start.Index;
+
+		public SourceLocation Start => _start;
+
+		public SourceSpan (SourceLocation start, SourceLocation end) {
+			_start = start;
+			_end = end;
+		}
+
+		public static bool operator != (SourceSpan left, SourceSpan right) {
+			return !left.Equals ( right );
+		}
+
+		public static bool operator == (SourceSpan left, SourceSpan right) {
+			return left.Equals ( right );
+		}
+
+		public override bool Equals (object obj) {
+			if ( obj is SourceSpan ) {
+				return Equals ( (SourceSpan)obj );
+			}
+			return base.Equals ( obj );
+		}
+
+		public bool Equals (SourceSpan other) {
+			return other.Start == Start && other.End == End;
+		}
+
+		public override int GetHashCode () {
+			return 0x509CE ^ Start.GetHashCode () ^ End.GetHashCode ();
+		}
+
+		public override string ToString () {
+			return $"{_start.Line} {_start.Column} {Length}";
+		}
+	}
 }

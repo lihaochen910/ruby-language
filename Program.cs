@@ -3,14 +3,14 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Dynamic;
 
-namespace Diggins.Jigsaw
+namespace Ruby
 {
     class Program
     {
-        static object AddTest(object a, object b)
-        {
-            return Primitives.add(a, b);
-        }
+        //static object AddTest(object a, object b)
+        //{
+        //    return Primitives.add(a, b);
+        //}
 
         static void Main(string[] args)
         {
