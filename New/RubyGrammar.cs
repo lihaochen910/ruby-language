@@ -30,16 +30,16 @@ namespace Ruby {
 
 		#region 数字
 		public static Rule FloatLiteral () {
-			return RubyAstNode ( ASTNodeType.FLOAT, Seq ( Opt ( SingleChar ( '-' ) ), Plus ( Digit () ), SingleChar ( '.' ), Plus ( Digit () ) ) );
+			return RubyAstNode ( ASTNodeType.FLOAT, Seq ( Opt ( SingleChar ( '-' ) ), OneOrMore ( Digit () ), SingleChar ( '.' ), OneOrMore ( Digit () ) ) );
 		}
 		public static Rule FixnumLiteral () {
-			return RubyAstNode ( ASTNodeType.INT, Seq ( Opt ( SingleChar ( '-' ) ), Plus ( Digit () ), Not ( CharSet ( "." ) ) ) );
+			return RubyAstNode ( ASTNodeType.INT, Seq ( Opt ( SingleChar ( '-' ) ), OneOrMore ( Digit () ), Not ( CharSet ( "." ) ) ) );
 		}
 		public static Rule BinaryLiteral () {
-			return RubyAstNode ( ASTNodeType.INT, Seq ( CharSeq ( "0b" ), Plus ( CharRange ( '0', '1' ) ), Not ( CharSet ( "." ) ) ) );
+			return RubyAstNode ( ASTNodeType.INT, Seq ( CharSeq ( "0b" ), OneOrMore ( CharRange ( '0', '1' ) ), Not ( CharSet ( "." ) ) ) );
 		}
 		public static Rule HexLiteral () {
-			return RubyAstNode ( ASTNodeType.INT, Seq ( CharSeq ( "0x" ), Plus ( Choice ( Digit (), CharRange ( 'a', 'f' ), CharRange ( 'A', 'F' ) ) ), Not ( CharSet ( "." ) ) ) );
+			return RubyAstNode ( ASTNodeType.INT, Seq ( CharSeq ( "0x" ), OneOrMore ( Choice ( Digit (), CharRange ( 'a', 'f' ), CharRange ( 'A', 'F' ) ) ), Not ( CharSet ( "." ) ) ) );
 		}
 		public static Rule NumberLiteral () {
 			return Choice ( FixnumLiteral (), FloatLiteral (), BinaryLiteral (), HexLiteral () );
@@ -48,22 +48,22 @@ namespace Ruby {
 
 		#region 变量常量
 		public static Rule Identifier () {
-			return Seq ( IdentFirstChar (), Star ( IdentNextChar () ) );
+			return Seq ( IdentFirstChar (), ZeroOrMore ( IdentNextChar () ) );
 		}
 		public static Rule LocalVariableReference () {
-			return RubyAstNode ( ASTNodeType.LVAR, Seq ( IdentFirstChar (), Star ( IdentNextChar () ) ) );
+			return RubyAstNode ( ASTNodeType.LVAR, Seq ( IdentFirstChar (), ZeroOrMore ( IdentNextChar () ) ) );
 		}
 		public static Rule InstanceVariableReference () {
-			return RubyAstNode ( ASTNodeType.IVAR, Seq ( SingleChar ( '@' ), IdentFirstChar (), Star ( IdentNextChar () ) ) );
+			return RubyAstNode ( ASTNodeType.IVAR, Seq ( SingleChar ( '@' ), IdentFirstChar (), ZeroOrMore ( IdentNextChar () ) ) );
 		}
 		public static Rule ConstantReference () {
-			return RubyAstNode ( ASTNodeType.CONST, Plus ( CharRange ( 'A', 'Z' ) ) );
+			return RubyAstNode ( ASTNodeType.CONST, OneOrMore ( CharRange ( 'A', 'Z' ) ) );
 		}
 		public static Rule ClassVariableReference () {
-			return RubyAstNode ( ASTNodeType.CVAR, Seq ( CharSeq ( "@@" ), IdentFirstChar (), Star ( IdentNextChar () ) ) );
+			return RubyAstNode ( ASTNodeType.CVAR, Seq ( CharSeq ( "@@" ), IdentFirstChar (), ZeroOrMore ( IdentNextChar () ) ) );
 		}
 		public static Rule GlobalVariableReference () {
-			return RubyAstNode ( ASTNodeType.GVAR, Seq ( SingleChar ( '$' ), IdentFirstChar (), Star ( IdentNextChar () ) ) );
+			return RubyAstNode ( ASTNodeType.GVAR, Seq ( SingleChar ( '$' ), IdentFirstChar (), ZeroOrMore ( IdentNextChar () ) ) );
 		}
 		public static Rule Variable () {
 			return Choice ( LocalVariableReference (), InstanceVariableReference (), ConstantReference (), ClassVariableReference (), GlobalVariableReference () );
@@ -84,45 +84,45 @@ namespace Ruby {
 			return RubyAstNode ( ASTNodeType.SELF, Word ( "self" ) );
 		}
 		public static Rule SymbolLiteral () {
-			return RubyAstNode ( ASTNodeType.SYM, Seq ( SingleChar ( ':' ), IdentFirstChar (), Star ( IdentNextChar () ) ) );
+			return RubyAstNode ( ASTNodeType.SYM, Seq ( SingleChar ( ':' ), IdentFirstChar (), ZeroOrMore ( IdentNextChar () ) ) );
 		}
 		public static Rule UnicodeChar () { 
 			return Seq ( CharSeq ( "\\u" ), HexDigit (), HexDigit (), HexDigit (), HexDigit () );
 		}
 		public static Rule ControlChar () { 
-			return SingleChar ( '\\' ) + CharSet ( "\"\'\\/befnrst" );
+			return Seq ( SingleChar ( '\\' ), CharSet ( "\"\'\\/befnrst" ) );
 		}
 		//public static Rule ParamChar = Node ( StringToken ( "#{" ) + RecExpr + CharToken ( '}' ) );
 		public static Rule DoubleQuotedString () {
-			return RubyAstNode ( ASTNodeType.STR, Seq ( SingleChar ( '\"' ), Star ( Choice ( UnicodeChar (), ControlChar (), Not ( CharSet ( "\"\\" ) ) )  /*| ParamChar*/ ), SingleChar ( '\"' ) ) );
+			return RubyAstNode ( ASTNodeType.STR, Seq ( SingleChar ( '\"' ), ZeroOrMore ( Choice ( UnicodeChar (), ControlChar (), ExceptCharSet ( "\"\\" ) )  /*| ParamChar*/ ), SingleChar ( '\"' ) ) );
 		}
 		public static Rule SingleQuotedString () {
-			return RubyAstNode ( ASTNodeType.STR, Seq ( SingleChar ( '\'' ) + Star ( Choice ( UnicodeChar (), ControlChar (), Not ( CharSet ( "\"\\" ) ) )  /*| ParamChar*/ ), SingleChar ( '\'' ) ) );
+			return RubyAstNode ( ASTNodeType.STR, Seq ( SingleChar ( '\'' ), ZeroOrMore ( Choice ( UnicodeChar (), ControlChar (), ExceptCharSet ( "\"\\" ) )  /*| ParamChar*/ ), SingleChar ( '\'' ) ) );
 		}
 		//public static Rule LineOrientedString = Node ( MatchString ( "<<EOF" ) + ZeroOrMore ( UnicodeChar | ControlChar | ParamChar ) + WS + MatchString ( "EOF" ) );
 		public static Rule StringLiteral () {
 			return RubyAstNode ( ASTNodeType.STR, Choice ( DoubleQuotedString (), SingleQuotedString () ) );
 		}
 		public static Rule ArrayLiteral () {
-			return RubyAstNode ( ASTNodeType.ARRAY, Seq ( Token ( "[" ), Star ( Delay ( Expr ) ), NoFail ( Token ( "]" ), "missing ']'" ) ) );
+			return RubyAstNode ( ASTNodeType.ARRAY, Seq ( Token ( "[" ), CommaDelimited ( RecursiveExpr () ), WS (), Token ( "]" ) ) );
 		}
 		public static Rule PairName () {
 			return Choice ( Identifier (), SymbolLiteral (), StringLiteral () );
 		}
 		public static Rule Pair () {
-			return PairName () + WS () + ( Choice ( Token ( "=>" ), Token ( ":" ), Token ( "=" ) ) ) + Delay ( Expr ) + WS ();
+			return Seq ( PairName (), WS (), Choice ( Token ( "=>" ), Token ( ":" ), Token ( "=" ) ), RecursiveExpr (), WS () );
 		}
 		public static Rule HashLiteral () {
-			return RubyAstNode ( ASTNodeType.HASH, Token ( "{" ) + CommaDelimited ( Pair () ) + WS () + Token ( "}" ) );
+			return RubyAstNode ( ASTNodeType.HASH, Seq ( Token ( "{" ), CommaDelimited ( Pair () ), WS (), Token ( "}" ) ) );
 		}
 		public static Rule LambdaLiteral () {
-			return RubyAstNode ( ASTNodeType.LAMBDA, Seq ( Token ( "->" ), Token ( "{" ), Opt ( AnonymousArgs () ), Expr (), WS (), Token ( "}" ) ) );
+			return RubyAstNode ( ASTNodeType.LAMBDA, Seq ( Token ( "->" ), Token ( "{" ), Opt ( AnonymousArgs () ), RecursiveExpr (), WS (), Token ( "}" ) ) );
 		}
 		public static Rule ProcLiteral_1 () {
-			return RubyAstNode ( ASTNodeType.LAMBDA, Seq ( Token ( "{" ), Opt ( AnonymousArgs () ), Star ( Delay ( Expr ) ), WS (), Token ( "}" ) ) );
+			return RubyAstNode ( ASTNodeType.LAMBDA, Seq ( Token ( "{" ), Opt ( AnonymousArgs () ), ZeroOrMore ( Delay ( Expr ) ), WS (), Token ( "}" ) ) );
 		}
 		public static Rule ProcLiteral_2 () {
-			return RubyAstNode ( ASTNodeType.LAMBDA, Seq ( Word ( "do" ), Opt ( AnonymousArgs () ), Star ( Delay ( Expr ) ), WS (), Word ( "end" ) ) );
+			return RubyAstNode ( ASTNodeType.LAMBDA, Seq ( Word ( "do" ), Opt ( AnonymousArgs () ), ZeroOrMore ( Delay ( Expr ) ), WS (), Word ( "end" ) ) );
 		}
 		#endregion
 
@@ -134,22 +134,22 @@ namespace Ruby {
 			return Seq ( Identifier (), Token ( "=" ), Delay ( Expr ) );
 		}
 		public static Rule Args () {
-			return Seq ( Token ( "(" ), CommaDelimited ( Delay ( Expr ) ), Token ( ")" ) );
+			return Seq ( Token ( "(" ), CommaDelimited ( RecursiveExpr () ), Token ( ")" ) );
 		}
 		public static Rule ArgsWithBlockArg () {
-			return Seq ( Token ( "(" ), CommaDelimited ( Delay ( Expr ) ), Opt ( Choice ( Seq ( SingleChar ( '&' ), Identifier () ), Seq ( SingleChar ( '*' ), Identifier () ) ) ), Token ( ")" ) );
+			return Seq ( Token ( "(" ), CommaDelimited ( RecursiveExpr () ), Opt ( Choice ( Seq ( SingleChar ( '&' ), Identifier () ), Seq ( SingleChar ( '*' ), Identifier () ) ) ), Token ( ")" ) );
 		}
 		public static Rule AnonymousArgs () {
 			return Seq ( Token ( "|" ), CommaDelimited ( Choice ( Identifier (), DefaultParam () ) ), Token ( "|" ) );
 		}
 		public static Rule Index () {
-			return Seq ( Token ( "[" ), Delay ( Expr ), Token ( "]" ) );
+			return Seq ( Token ( "[" ), RecursiveExpr (), Token ( "]" ) );
 		}
 		public static Rule Field () {
 			return Seq ( Token ( "." ), Identifier () );
 		}
 		public static Rule ParenExpr () {
-			return Seq ( Token ( "(" ), Delay ( Expr ), WS (), Token ( ")" ) );
+			return Seq ( Token ( "(" ), RecursiveExpr (), WS (), Token ( ")" ) );
 		}
 		public static Rule LeafExpr () {
 			return Choice ( Literal (), Variable (), ParenExpr (), CallExpr (), OpCallExpr (), FunctionCallExpr () );
@@ -158,7 +158,7 @@ namespace Ruby {
 			return CharSet ( "! not - ~" );
 		}
 		public static Rule PrefixExpr () {
-			return Seq ( PrefixOp (), Delay ( PrefixOrLeafExpr ) );
+			return Seq ( PrefixOp (), Recursive ( () => PrefixOrLeafExpr () ) );
 		}
 		public static Rule PrefixOrLeafExpr () {
 			return Choice ( PrefixExpr (), LeafExpr () );
@@ -167,7 +167,7 @@ namespace Ruby {
 			return Choice ( Field (), Index (), Args (), ArgsWithBlockArg () );
 		}
 		public static Rule PostfixExpr () {
-			return Seq ( PrefixOrLeafExpr (), WS (), Star ( Seq ( PostfixOp (), WS () ) ) );
+			return Seq ( PrefixOrLeafExpr (), WS (), ZeroOrMore ( Seq ( PostfixOp (), WS () ) ) );
 		}
 		public static Rule UnaryExpr () {
 			return Choice ( PostfixExpr (), PrefixOrLeafExpr () );
@@ -176,58 +176,61 @@ namespace Ruby {
 			return CharSet ( "<= >= <=> == != === << >> && || and or < > & | ^ ~ + - * ** % / .. ..." );
 		}
 		public static Rule BinaryExpr () {
-			return Seq ( UnaryExpr (), WS (), BinaryOp (), WS (), Star ( Delay ( Expr ) ) );
+			return Seq ( UnaryExpr (), WS (), BinaryOp (), WS (), RecursiveExpr () );
 		}
 		public static Rule AssignOp () {
 			return CharSet ( "&&= ||= >>= <<= += -= *= **= %= /= |= ^= =" );
 		}
 		public static Rule AssignExpr () {
-			return Seq ( Choice ( Variable (), PostfixExpr () ), WS (), AssignOp (), WS (), Star ( Delay ( Expr ) ) );
+			return Seq ( Choice ( Variable (), PostfixExpr () ), WS (), AssignOp (), WS (), RecursiveExpr () );
 		}
 		public static Rule TertiaryExpr () {
-			return Seq ( Choice ( AssignExpr (), BinaryExpr (), UnaryExpr () ), WS (), Token ( "?" ), Delay ( Expr ), Token ( ":" ), Delay ( Expr ), WS () );
+			return Seq ( Choice ( AssignExpr (), BinaryExpr (), UnaryExpr () ), WS (), Token ( "?" ), RecursiveExpr (), Token ( ":" ), RecursiveExpr (), WS () );
 		}
 		public static Rule CallExpr () {
-			return RubyAstNode ( ASTNodeType.CALL, Delay ( Expr ) + SingleChar ( '.' ) + Opt ( Token ( "(" ) + CommaDelimited ( Delay ( Expr ) ) + Token ( ")" ) ) );
+			return RubyAstNode ( ASTNodeType.CALL, Seq ( RecursiveExpr (), SingleChar ( '.' ), Opt ( Token ( "(" ) + CommaDelimited ( RecursiveExpr () ) + Token ( ")" ) ) ) );
 		}
 		public static Rule OpCallExpr () {
-			return RubyAstNode ( ASTNodeType.SCALL, Delay ( Expr ) + Opt ( SingleChar ( '.' ) ) + StringSet ( "! % + - * / = | < > []" ) + Opt ( Token ( "(" ) + CommaDelimited ( Delay ( Expr ) ) + Token ( ")" ) ) );
+			return RubyAstNode ( ASTNodeType.SCALL, Seq ( RecursiveExpr (), Opt ( SingleChar ( '.' ) ), StringSet ( "! % + - * / = | < > []" ), Opt ( Token ( "(" ) + CommaDelimited ( Delay ( Expr ) ) + Token ( ")" ) ) ) );
 		}
 		public static Rule FunctionCallExpr () {
-			return RubyAstNode ( ASTNodeType.FCALL, Identifier () + Opt ( Token ( "(" ) + CommaDelimited ( Delay ( Expr ) ) + Token ( ")" ) ) );
+			return RubyAstNode ( ASTNodeType.FCALL, Seq ( Identifier (), Opt ( Token ( "(" ) + CommaDelimited ( RecursiveExpr () ) + Token ( ")" ) ) ) );
 		}
 		public static Rule Expr () {
-			return Token ( Choice ( AssignExpr (), UnaryExpr (), BinaryExpr (), TertiaryExpr (), LambdaLiteral (), ProcLiteral_1 (), ProcLiteral_2 () ) );
+			return Token ( Choice ( AssignExpr (), UnaryExpr (), BinaryExpr (), TertiaryExpr ()/*, LambdaLiteral (), ProcLiteral_1 (), ProcLiteral_2 ()*/ ) );
 		}
 		public static Rule ExprList () {
-			return Seq ( Expr (), Star ( Seq ( Token ( "," ), Expr () ) ) );
+			return Seq ( Expr (), ZeroOrMore ( Seq ( Token ( "," ), Expr () ) ) );
+		}
+		public static Rule RecursiveExpr () {
+			return Recursive ( () => Expr () );
 		}
 		#endregion
 
 		#region Statement
 		public static Rule Else () {
-			return Seq ( Word ( "else" ), Star ( Delay ( Statement ) ) );
+			return Seq ( Word ( "else" ), ZeroOrMore ( Delay ( Statement ) ) );
 		}
 		public static Rule ElseIf () {
 			return Seq ( Word ( "elsif" ), OptParenthesize ( Expr () ), Opt ( Word ( "then" ) ) );
 		}
 		public static Rule If () {
-			return RubyAstNode ( ASTNodeType.IF, Seq ( Word ( "if" ), OptParenthesize ( Expr () ), Opt ( Word ( "then" ) ), Star ( Delay ( Statement ) ), Opt ( Choice ( Else (), ElseIf () ) ), WS (), Word ( "end" ) ) );
+			return RubyAstNode ( ASTNodeType.IF, Seq ( Word ( "if" ), OptParenthesize ( Expr () ), Opt ( Word ( "then" ) ), ZeroOrMore ( Delay ( Statement ) ), Opt ( Choice ( Else (), ElseIf () ) ), WS (), Word ( "end" ) ) );
 		}
 		public static Rule IfModifier () {
 			return RubyAstNode ( ASTNodeType.IF, Seq ( LastStatement (), WS (), Word ( "if" ), Expr (), UntilEndOfLine () ) );
 		}
 		public static Rule For () {
-			return RubyAstNode ( ASTNodeType.FOR, Seq ( Word ( "for" ), LocalVariableReference (), WS (), Word ( "in" ), Expr (), WS () + Opt ( Word ( "do" ) ), Star ( Delay ( Statement ) ), WS () + Word ( "end" ) ) );
+			return RubyAstNode ( ASTNodeType.FOR, Seq ( Word ( "for" ), LocalVariableReference (), WS (), Word ( "in" ), Expr (), WS () + Opt ( Word ( "do" ) ), ZeroOrMore ( Delay ( Statement ) ), WS () + Word ( "end" ) ) );
 		}
 		public static Rule While () {
-			return RubyAstNode ( ASTNodeType.WHILE, Seq ( Word ( "while" ), OptParenthesize ( Expr () ) + Opt ( Word ( "do" ) ), Star ( Delay ( Statement ) ), WS (), Word ( "end" ) ) );
+			return RubyAstNode ( ASTNodeType.WHILE, Seq ( Word ( "while" ), OptParenthesize ( Expr () ) + Opt ( Word ( "do" ) ), ZeroOrMore ( Delay ( Statement ) ), WS (), Word ( "end" ) ) );
 		}
 		public static Rule Until () {
-			return RubyAstNode ( ASTNodeType.UNTIL, Seq ( Word ( "until" ), OptParenthesize ( Expr () ) + Opt ( Word ( "do" ) ), Star ( Delay ( Statement ) ), WS (), Word ( "end" ) ) );
+			return RubyAstNode ( ASTNodeType.UNTIL, Seq ( Word ( "until" ), OptParenthesize ( Expr () ) + Opt ( Word ( "do" ) ), ZeroOrMore ( Delay ( Statement ) ), WS (), Word ( "end" ) ) );
 		}
 		public static Rule Unless () {
-			return RubyAstNode ( ASTNodeType.IF, Seq ( Word ( "unless" ), OptParenthesize ( Expr () ), Opt ( Word ( "then" ) ), Star ( Delay ( Statement ) ), Opt ( Else () ), WS (), Word ( "end" ) ) );
+			return RubyAstNode ( ASTNodeType.IF, Seq ( Word ( "unless" ), OptParenthesize ( Expr () ), Opt ( Word ( "then" ) ), ZeroOrMore ( Delay ( Statement ) ), Opt ( Else () ), WS (), Word ( "end" ) ) );
 		}
 		public static Rule UnlessModifier () {
 			return RubyAstNode ( ASTNodeType.IF, Seq ( LastStatement (), WS (), Word ( "unless" ), Expr (), UntilEndOfLine () ) );
@@ -235,10 +238,10 @@ namespace Ruby {
 		public static Rule Case () {
 			return RubyAstNode ( ASTNodeType.CASE, Seq ( 
 				Word ( "case" ), Expr (), 
-				Plus ( Seq ( Word ( "when" ), Plus ( Expr () ), Opt ( Word ( "then" ) ),
-						Star ( Delay ( Statement ) ) ) ),
+				OneOrMore ( Seq ( Word ( "when" ), OneOrMore ( Expr () ), Opt ( Word ( "then" ) ),
+						ZeroOrMore ( Delay ( Statement ) ) ) ),
 				Opt ( Else () ), WS (), 
-					Star ( Delay ( Statement ) ), WS (),
+					ZeroOrMore ( Delay ( Statement ) ), WS (),
 				Word ( "end" ) ) );
 		}
 		public static Rule Return () {
@@ -264,14 +267,14 @@ namespace Ruby {
 		}
 		public static Rule ClassDefinitions () {
 			return RubyAstNode ( ASTNodeType.CLASS, Seq (
-				Word ( "class" ), Identifier (), Opt ( Word ( "<" ) + Identifier () ) | ( Word ( "<<" ) + Delay ( Expr ) ),
-					Star ( Choice ( Delay ( Expr ), Delay ( ClassDefinitions ), Delay ( ModuleDefinitions ) ) ), WS (),
+				Word ( "class" ), Identifier (), Choice ( Opt ( Word ( "<" ) + Identifier () ), ( Word ( "<<" ) + Delay ( Expr ) ) ),
+					ZeroOrMore ( Choice ( Delay ( Expr ), Delay ( ClassDefinitions ), Delay ( ModuleDefinitions ) ) ), WS (),
 				Word ( "end" ) ) );
 		}
 		public static Rule ModuleDefinitions () {
 			return RubyAstNode ( ASTNodeType.CLASS, Seq (
 				Word ( "module" ), Identifier (),
-					Star ( Choice ( Delay ( Expr ), Delay ( ClassDefinitions ), Delay ( ModuleDefinitions ) ) ), WS (),
+					ZeroOrMore ( Choice ( Delay ( Expr ), Delay ( ClassDefinitions ), Delay ( ModuleDefinitions ) ) ), WS (),
 				Word ( "end" ) ) );
 		}
 		public static Rule FunctionDefinitionsArgsWithBlockArg () {
@@ -280,13 +283,13 @@ namespace Ruby {
 		public static Rule FunctionDefinitions () {
 			return RubyAstNode ( ASTNodeType.METHOD, Seq (
 				Word ( "def" ), Identifier (), Opt ( FunctionDefinitionsArgsWithBlockArg () ),
-					Star ( Choice ( Delay ( Expr ), Delay ( Statement ) ) ), WS (),
+					ZeroOrMore ( Choice ( Delay ( Expr ), Delay ( Statement ) ) ), WS (),
 				Word ( "end" ) ) );
 		}
 		public static Rule ClassFunctionDefinitions () {
 			return RubyAstNode ( ASTNodeType.METHOD, Seq (
 				Word ( "def" ), Identifier (), Choice ( SingleChar ( '.' ), CharSeq ( "::" ) ), Identifier (), Opt ( FunctionDefinitionsArgsWithBlockArg () ),
-					Star ( Choice ( Delay ( Expr ), Delay ( Statement ) ) ), WS (),
+					ZeroOrMore ( Choice ( Delay ( Expr ), Delay ( Statement ) ) ), WS (),
 				Word ( "end" ) ) );
 		}
 		public static Rule EmptyStatement () {
@@ -301,8 +304,11 @@ namespace Ruby {
 			return NoFail ( WhileNot ( AnyChar (), NL () ), "expected a new line" );
 		}
 		public static Rule WS () {
-			return Star ( Choice ( CharSet ( " \t\n\r" ), Comment () ) );
+			return Regex ( @"\s+" );
 		}
+		//public static Rule WS () {
+		//	return ZeroOrMore ( Choice ( CharSet ( " \t\n\r" ), Comment () ) );
+		//}
 		public static Rule Token (string s) {
 			return Token ( CharSeq ( s ) );
 		}
@@ -310,7 +316,7 @@ namespace Ruby {
 			return Seq ( r, WS () );
 		}
 		public static Rule CommaDelimited ( Rule r ) {
-			return Opt ( r + ( Star ( Token ( "," ) + r ) + Opt ( Token ( "," ) ) ) );
+			return Opt ( Seq ( r, ZeroOrMore ( Seq ( Token ( "," ), r ) ), Opt ( Token ( "," ) ) ) );
 		}
 		public static Rule Word (string s) {
 			return Seq ( CharSeq ( s ), EOW (), WS () );
@@ -322,13 +328,13 @@ namespace Ruby {
 			return Choice ( EscapeChar (), NotChar ( '"' ) );
 		}
 		public static Rule CodeBlock () {
-			return Seq ( Opt ( Token ( "{" ) ), Star ( Choice ( Statement (), Expr () ) ), Opt ( Token ( "}" ) ) );
+			return Seq ( Opt ( Token ( "{" ) ), ZeroOrMore ( Choice ( Statement (), Expr () ) ), Opt ( Token ( "}" ) ) );
 		}
 		public static Rule Param () {
 			return Token ( RubyAstNode ( ASTNodeType.ARG, Identifier () ) );
 		}
 		public static Rule Params () {
-			return Seq ( Token ( "(" ), Star ( Param () ), NoFail ( Token ( ")" ), "missing ')'" ) );
+			return Seq ( Token ( "(" ), ZeroOrMore ( Param () ), NoFail ( Token ( ")" ), "missing ')'" ) );
 		}
 		public static Rule Parenthesize ( Rule r ) {
 			return Seq ( Token ( "(" ), r, WS (), Token ( ")" ) );
@@ -338,7 +344,7 @@ namespace Ruby {
 		}
 
 		public static Rule RubyScript () {
-			return Seq ( WS (), Star ( Choice ( Expr (), Statement () ) ), WS (), NoFail ( EndOfInput (), "expected macro or function defintion" ) );
+			return Seq ( WS (), ZeroOrMore ( Choice ( Expr (), Statement () ) ), WS (), NoFail ( EndOfInput (), "expected macro or function defintion" ) );
 		}
 	}
 }

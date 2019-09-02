@@ -377,12 +377,36 @@ namespace Peg
             }
         }
 
-        /// <summary>
-        /// This corresponds to a sequence operator in a PEG grammar. This tries 
-        /// to match a series of rules in order, if one rules fails, then the entire 
-        /// group fails and the parser index is returned to the original state.
-        /// </summary>
-        public class SeqRule : Rule
+		/// <summary>
+		/// This creates rules that can recursively refer to themselves
+		/// directly or indirectly. 
+		/// </summary>
+		public class RecursiveRule : Rule {
+
+			public RecursiveRule (Func<Rule> ruleGen) {
+				this.ruleGen = ruleGen;
+			}
+
+			public override bool Match (Parser state) {
+				if ( Children.Count == 0 )
+					Children.Add ( ruleGen () );
+				return Children[0].Match ( state );
+			}
+
+			public override string ToString () {
+				return Children.Count > 0 ? Children[0].ToString () : "recursive";
+			}
+
+			Func<Rule> ruleGen;
+			public List<Rule> Children = new List<Rule> ();
+		}
+
+		/// <summary>
+		/// This corresponds to a sequence operator in a PEG grammar. This tries 
+		/// to match a series of rules in order, if one rules fails, then the entire 
+		/// group fails and the parser index is returned to the original state.
+		/// </summary>
+		public class SeqRule : Rule
         {
             public SeqRule(Rule[] xs)
             {
@@ -624,10 +648,29 @@ namespace Peg
             char mData;
         }
 
-        /// <summary>
-        /// Attempts to match a sequence of characters.
-        /// </summary>
-        public class CharSeqRule : Rule
+		/// <summary>
+		/// Matches specific character use Predicate<char>.
+		/// </summary>
+		public class CharRule : Rule {
+
+			public CharRule (Predicate<char> p) {
+				predicate = p;
+			}
+
+			public override bool Match (Parser p) {
+				if ( p.AtEnd () ) return false;
+				if ( !predicate ( p.GetChar () ) ) return false;
+				p.GotoNext ();
+				return true;
+			}
+
+			Predicate<char> predicate;
+		}
+
+		/// <summary>
+		/// Attempts to match a sequence of characters.
+		/// </summary>
+		public class CharSeqRule : Rule
         {
             public CharSeqRule(string x)
             {
@@ -806,7 +849,8 @@ namespace Peg
 
 		public static Rule EndOfInput() { return new EndOfInputRule(); }
         public static Rule Delay(RuleDelegate r) { return new DelayRule(r); }
-        public static Rule SingleChar(char c) { return new SingleCharRule(c); }
+		public static Rule Recursive ( Func<Rule> ruleGen ) { return new RecursiveRule ( ruleGen ); }
+		public static Rule SingleChar(char c) { return new SingleCharRule(c); }
         public static Rule CharSeq(string s) { return new CharSeqRule(s); }
         public static Rule AnyChar() { return new AnyCharRule(); }
         public static Rule NotChar(char c) { return Seq(Not(SingleChar(c)), AnyChar()); }
@@ -815,18 +859,12 @@ namespace Peg
         public static Rule AstNode(Object label, Rule x) { return new AstNodeRule(label, x); }
         public static Rule NoFail(Rule r, string s) { return new NoFailRule(r, s); }
         public static Rule Seq(Rule x0, Rule x1) { return new SeqRule(new Rule[] { x0, x1 }); }
-        public static Rule Seq(Rule x0, Rule x1, Rule x2) { return new SeqRule(new Rule[] { x0, x1, x2 }); }
-        public static Rule Seq(Rule x0, Rule x1, Rule x2, Rule x3) { return new SeqRule(new Rule[] { x0, x1, x2, x3 }); }
-        public static Rule Seq(Rule x0, Rule x1, Rule x2, Rule x3, Rule x4) { return new SeqRule(new Rule[] { x0, x1, x2, x3, x4 }); }
-		public static Rule Seq (params Rule[] rs) { return new SeqRule ( rs ); }
+		public static Rule Seq (params Rule[] rs) { if ( rs == null || rs.Length <= 1 ) throw new ArgumentException ( "Seq (params) : params <= 1" ); return new SeqRule ( rs ); }
 		public static Rule Choice(Rule x0, Rule x1) { return new ChoiceRule(new Rule[] { x0, x1 }); }
-        public static Rule Choice(Rule x0, Rule x1, Rule x2) { return new ChoiceRule(new Rule[] { x0, x1, x2 }); }
-        public static Rule Choice(Rule x0, Rule x1, Rule x2, Rule x3) { return new ChoiceRule(new Rule[] { x0, x1, x2, x3 }); }
-        public static Rule Choice(Rule x0, Rule x1, Rule x2, Rule x3, Rule x4) { return new ChoiceRule(new Rule[] { x0, x1, x2, x3, x4 }); }
-        public static Rule Choice(params Rule[] rs) { return new ChoiceRule(rs); }
+        public static Rule Choice(params Rule[] rs) { if ( rs == null || rs.Length <= 1 ) throw new ArgumentException ( "Choice (params) : params <= 1" ); return new ChoiceRule(rs); }
         public static Rule Opt(Rule x) { return new OptRule(x); }
-        public static Rule Star(Rule x) { return new StarRule(x); }
-        public static Rule Plus(Rule x) { return new PlusRule(x); }
+        public static Rule ZeroOrMore(Rule x) { return new StarRule(x); }
+        public static Rule OneOrMore(Rule x) { return new PlusRule(x); }
         public static Rule Not(Rule x) { return new NotRule(x); }
         public static Rule WhileNot(Rule elem, Rule term) { return new WhileNotRule(elem, term); }
         public static Rule NL() { return CharSet("\n"); }
@@ -834,17 +872,21 @@ namespace Peg
         public static Rule UpperCaseLetter() { return CharRange('A', 'Z'); }
         public static Rule Letter() { return Choice(LowerCaseLetter(), UpperCaseLetter()); }
         public static Rule Digit() { return CharRange('0', '9'); }
-        public static Rule Digits() { return Plus ( Digit () ); }
+        public static Rule Digits() { return OneOrMore ( Digit () ); }
         public static Rule HexDigit() { return Choice(Digit(), Choice(CharRange('a', 'f'), CharRange('A', 'F'))); }
         public static Rule BinaryDigit() { return CharSet("01"); }
         public static Rule IdentFirstChar() { return Choice(SingleChar('_'), Letter()); }
         public static Rule IdentNextChar() { return Choice(IdentFirstChar(), Digit()); }
-        public static Rule Ident() { return Seq(IdentFirstChar(), Star(IdentNextChar())); }
+        public static Rule Ident() { return Seq(IdentFirstChar(), ZeroOrMore(IdentNextChar())); }
         public static Rule EOW() { return Not(IdentNextChar()); }
-        public static Rule DelimitedGroup(String x, Rule r, String y) { return Seq(CharSeq(x), Star(r), NoFail(CharSeq(y), "expected " + y)); }
+        public static Rule DelimitedGroup(String x, Rule r, String y) { return Seq(CharSeq(x), ZeroOrMore(r), NoFail(CharSeq(y), "expected " + y)); }
 		public static Rule Regex (string s) { return new RegexRule ( new Regex ( s ) ); }
 		public static Rule AnyString (params string[] xs) { return Choice ( xs.Select ( x => CharSeq ( x ) ).ToArray () ); }
 		public static Rule StringSet (string s) { return AnyString ( s.Split ( ' ' ) ); }
+		public static Rule ExceptCharSet (string s) {
+			if ( String.IsNullOrEmpty ( s ) ) throw new ArgumentException ();
+			return new CharRule ( c => !s.Contains ( c ) );
+		}
 	}
 
 	public struct SourceLocation : IEquatable<SourceLocation> {

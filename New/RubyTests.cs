@@ -128,6 +128,7 @@ namespace Ruby
 
 			//TestParse ( "<<EOF text here\n text EOF", RubyGrammar.LineOrientedString );
 			TestParse ( "\"hello\"", RubyGrammar.StringLiteral () );
+			TestParse ( "\'hello\'", RubyGrammar.StringLiteral () );
 			TestParse ( "99.9", RubyGrammar.Literal () );
 			TestParse ( "99", RubyGrammar.Literal () );
 			TestParse ( "true", RubyGrammar.Literal () );
